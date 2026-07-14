@@ -1,0 +1,33 @@
+.build/
+dist/
+dmgwork/
+.DS_Store
+**/.DS_Store
+*.pax
+
+# C++ / CMake / Swift build artifacts
+build/
+*.exe
+*.obj
+*.o
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ilk
+__pycache__/
+
+# Local macOS signing material (lives in the keychain, never in the repo)
+*.p12
+
+# ...but keep the windows/dist README (binaries above stay ignored)
+!windows/dist/
+windows/dist/*
+!windows/dist/README.md
+
+# Windows build artifacts (fetched/generated, never committed)
+windows/vendor/
+*_res.o
+windows/panel/banglakeyboard.ico
+wordtest
+wordtest.exe

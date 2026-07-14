@@ -1,0 +1,6 @@
+# build artifacts
+phontest
+bangla-phon
+bangla-phon-online
+wordtest
+*.o

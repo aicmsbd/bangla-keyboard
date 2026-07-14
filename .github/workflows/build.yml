@@ -1,0 +1,149 @@
+name: build
+
+# Builds every platform's package on its OWN native runner (a single dev machine can't
+# cross-compile all three), and uploads them as downloadable artifacts. On a version tag
+# it also attaches them to a GitHub Release.
+#
+#   macOS   -> বাঙলা কিবোর্ড.dmg           (drag-to-Applications installer)
+#   Windows -> BanglaKeyboard-Setup-*.exe  (Inno Setup installer for the tray keyboard)
+#   Linux   -> bangla-keyboard-ibus_*.deb  (Debian/Ubuntu) + a generic tarball (any distro)
+#
+# Optional macOS signing: set repo secrets MACOS_SIGN_P12_BASE64 + MACOS_SIGN_P12_PASSWORD
+# (produce them with `macos/app/setup-signing.sh --export`) so release DMGs are signed with
+# the SAME stable cert — then the Accessibility grant persists for users across updates.
+# Without the secrets the DMG is ad-hoc signed (still works; grant is per-version).
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*', 'win-v*', 'linux-v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read         # least privilege for build jobs; the release job elevates itself
+
+jobs:
+  # ------------------------------------------------------------------ macOS .dmg
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import signing certificate (optional)
+        env:
+          P12_BASE64: ${{ secrets.MACOS_SIGN_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MACOS_SIGN_P12_PASSWORD }}
+        run: |
+          if [ -z "$P12_BASE64" ]; then
+            echo "No signing secret set — DMG will be ad-hoc signed."
+            exit 0
+          fi
+          # Recreate the SAME keychain path + password build.sh expects, so it signs with
+          # `--keychain` unchanged and the identity 'Bangla Keyboard Dev' is found.
+          KC="$HOME/Library/Keychains/bangla-keyboard-signing.keychain-db"
+          KP="banglakeyboard-local-signing"
+          mkdir -p "$HOME/Library/Keychains"
+          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/bk.p12"
+          security delete-keychain "$KC" 2>/dev/null || true
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          security import "$RUNNER_TEMP/bk.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign -A
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KP" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/bk.p12"
+          echo "Imported 'Bangla Keyboard Dev' signing identity into the canonical keychain."
+      - name: Build app + DMG
+        working-directory: macos/app
+        env:
+          BK_NO_AUTO_SIGN: '1'          # never mint a throwaway cert on CI
+          BK_SKIP_DMG_LAYOUT: '1'       # no Finder automation on a headless runner
+        run: |
+          ./build.sh
+          ./build_dmg.sh
+          echo "--- signature ---"; codesign -d -r- "build/বাঙলা কিবোর্ড.app" 2>&1 | sed -n 's/^designated => //p'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: macos/app/dist/*.dmg
+          if-no-files-found: error
+
+  # -------------------------------------- Windows tray keyboard + Inno Setup installer
+  windows-installer:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils make curl unzip
+      - name: Build phonetic tray + engine self-test (MinGW)
+        run: |
+          cd windows
+          GXX64=g++ ./build-all.sh
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & "$iscc" "windows\installer\banglakeyboard.iss"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: windows/installer/dist/*.exe
+          if-no-files-found: error
+
+  # ------------------------------------------------------------ Linux IBus engine + .deb
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libibus-1.0-dev libgtk-3-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
+      - name: Build engine + .deb
+        run: |
+          chmod +x linux/*.sh
+          ./linux/build-deb.sh
+      - name: Generic tarball (any distro — binary + component + icons)
+        run: |
+          cd linux
+          tar -czf "dist/bangla-keyboard-ibus-linux-x86_64.tar.gz" \
+            -C dist ibus-engine-bangla bangla.xml bangla-dictionary.txt hardwords_raw.tsv bangla-panel ui \
+            -C .. icons install.sh uninstall.sh README.md panel/bangla-keyboard.desktop \
+            -C .. LICENSE NOTICE
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            linux/dist/*.deb
+            linux/dist/*.tar.gz
+          if-no-files-found: error
+
+  # ------------------------------------------- Attach everything to a Release (on a tag)
+  release:
+    needs: [macos, windows-installer, linux]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # only the release job may write (to publish the Release)
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+      - name: Publish release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: artifacts/**/*
+          fail_on_unmatched_files: false
+          generate_release_notes: true

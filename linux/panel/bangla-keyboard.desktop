@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=বাঙলা কিবোর্ড
+GenericName=Bangla Keyboard
+Comment=Type Bangla phonetically (Banglish) with live suggestions
+Exec=bangla-panel
+Icon=bangla-keyboard
+Terminal=false
+Categories=Utility;Office;
+Keywords=bangla;bengali;banglish;keyboard;phonetic;

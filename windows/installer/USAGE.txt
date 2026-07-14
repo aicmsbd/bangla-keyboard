@@ -1,0 +1,43 @@
+Bangla Keyboard for Windows
+===========================
+
+A free Bangla keyboard. It runs in the system tray (down by the clock) and lets
+you type Bangla in ANY app, switching from the tray or with a shortcut.
+
+SWITCHING
+  Ctrl + Alt + V     Bangla Unicode   (press again -> English)
+  Ctrl + Alt + B     Bangla Classic   (press again -> English)
+  Or left-click the tray icon, or right-click it for the menu.
+
+  The tray icon shows the mode:  green অ = Unicode,  red ক = Classic,  E = English.
+
+TYPING
+  Fixed Windows-style layout: type a prebase vowel BEFORE its consonant and it
+  reorders correctly (ে + ক -> কে). Independent vowels: f -> া, Shift+f -> অ,
+  Shift+f then f -> আ.
+
+  - Bangla Unicode works with any Bangla font — Windows ships "Nirmala UI" with
+    Bengali coverage, so no font is bundled or needed.
+
+  - Bangla Classic: The Bangla Classic layout outputs the legacy ASCII (non-Unicode)
+    encoding that legacy ANSI Bangla fonts use. Those fonts are
+    proprietary and are not included in this project. To use the Classic layout you
+    must install a compatible legacy ANSI Bangla font from your own legitimate
+    source, then select that font in your app.
+
+ENGLISH SHORTCUTS
+  All normal shortcuts keep working — Ctrl+C/V/X/A (copy/paste/cut/select-all),
+  Ctrl+S / Ctrl+Shift+S, Ctrl+Z/Y, Alt+F4, Alt+Tab, Win+..., arrows, etc.
+
+START WITH WINDOWS
+  Tick "Start automatically when I sign in" during install (or drop a shortcut to
+  bangla-tray.exe in shell:startup).
+
+QUIT
+  Right-click the tray icon -> Close.
+
+SmartScreen note: this build is not code-signed yet, so Windows may show
+"Windows protected your PC". Click "More info" -> "Run anyway".
+
+AICMS Public License v1.0. Free & open-source. https://github.com/aicmsbd/bangla-keyboard
+Made by AiCMS.BD.
