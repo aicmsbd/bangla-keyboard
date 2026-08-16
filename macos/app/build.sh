@@ -42,6 +42,8 @@ cat > "$APPDIR/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSMicrophoneUsageDescription</key><string>বাঙলা কিবোর্ড uses the microphone for voice typing (speech-to-text).</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>বাঙলা কিবোর্ড uses speech recognition to turn your voice into text.</string>
 </dict></plist>
 PLIST
 

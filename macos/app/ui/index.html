@@ -87,13 +87,17 @@
   #editor:focus{outline:2px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:1px;border-color:var(--accent)}
   #editor::placeholder{color:var(--muted);font-family:var(--ui);font-size:15px}
   .edwrap{position:relative;display:flex;flex-direction:column}
-  .copyInPanel{position:absolute;top:10px;right:10px;z-index:5;display:inline-flex;align-items:center;gap:5px;
-    padding:5px 9px;font-size:12px;line-height:1;cursor:pointer;font-family:var(--ui);
-    border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);
-    opacity:.82;transition:opacity .15s,color .15s,border-color .15s}
-  .copyInPanel:hover{opacity:1;color:var(--text);border-color:var(--accent)}
-  .copyInPanel svg{width:14px;height:14px}
-  .copyInPanel.ok{color:var(--accent-strong);border-color:var(--accent);opacity:1}
+  .panelbtns{position:absolute;top:10px;right:10px;z-index:5;display:flex;gap:6px}
+  .pbtn{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;font-size:12px;line-height:1;cursor:pointer;
+    font-family:var(--ui);border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);
+    opacity:.82;transition:opacity .15s,color .15s,border-color .15s,background .15s}
+  .pbtn:hover{opacity:1;color:var(--text);border-color:var(--accent)}
+  .pbtn svg{width:14px;height:14px}
+  .pbtn.ok{color:var(--accent-strong);border-color:var(--accent);opacity:1}
+  .pbtn.rec{color:#fff;background:#e5484d;border-color:#e5484d;opacity:1}
+  .pbtn.rec svg{animation:micpulse 1s infinite}
+  @keyframes micpulse{0%,100%{opacity:1}50%{opacity:.45}}
+  .pbtn[hidden]{display:none}
   .statusbar{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;padding:0 2px}
   .statusbar .mode{font-weight:700;color:var(--accent-strong)}
   .statusbar .mode .bn{font-family:var(--bn)}
@@ -153,10 +157,16 @@
       <div class="cands" id="cands"><span class="hint">Start typing — suggestions appear here.</span></div>
       <div class="edwrap">
         <textarea id="editor" placeholder="Type here…  e.g.  ami banglay likhi" spellcheck="false" autocomplete="off"></textarea>
-        <button class="copyInPanel" id="copyBtn" title="Copy the typed text (one click)" aria-label="Copy text">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          <span id="copyLbl">Copy</span>
-        </button>
+        <div class="panelbtns">
+          <button class="pbtn" id="micBtn" title="Voice typing — click and speak" aria-label="Voice typing" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            <span id="micLbl">Voice</span>
+          </button>
+          <button class="pbtn" id="copyBtn" title="Copy the typed text (one click)" aria-label="Copy text">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span id="copyLbl">Copy</span>
+          </button>
+        </div>
       </div>
       <div class="statusbar" id="statusbar">
         <span>Mode: <span class="mode" id="modeLbl"><span class="bn">বাংলা</span></span></span>
@@ -415,6 +425,47 @@ document.getElementById('swapBtn').onclick=()=>setMode(mode==='bn'?'en':'bn');
     const m=new DOMMatrixReadOnly(getComputedStyle(win).transform);ox=m.m41;oy=m.m42;bar.setPointerCapture(e.pointerId);});
   bar.addEventListener('pointermove',e=>{if(!drag)return;win.style.transform=`translate(${ox+e.clientX-sx}px,${oy+e.clientY-sy}px)`;});
   bar.addEventListener('pointerup',()=>drag=false);
+})();
+
+/* ---------- voice typing (Web Speech API — like freetool.bd) ---------- */
+(function(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtn=document.getElementById('micBtn'), micLbl=document.getElementById('micLbl');
+  if(!SR){ micBtn.hidden=true; return; }              // no speech engine in this WebView -> hide the button
+  micBtn.hidden=false;
+  let rec=null, listening=false, base='';
+  function setRec(on){ listening=on; micBtn.classList.toggle('rec',on); micLbl.textContent=on?'Listening…':'Voice'; }
+  function start(){
+    if(listening) return;
+    try{ rec=new SR(); }catch(e){ return; }
+    rec.lang = (mode==='bn') ? 'bn-BD' : 'en-US';     // follow the current mode
+    rec.continuous=true; rec.interimResults=true;
+    base = committed + (mode==='bn'?translit(roman):roman);  // freeze current text; speech appends after it
+    roman='';
+    rec.onstart=()=>setRec(true);
+    rec.onend=()=>{ setRec(false); rec=null; committed=editor.value; bufLbl.textContent=''; };
+    rec.onerror=(e)=>{
+      const msg = (e.error==='not-allowed'||e.error==='service-not-allowed') ? 'Mic blocked'
+                : (e.error==='network') ? 'No voice service'
+                : (e.error==='no-speech') ? 'Voice' : 'Voice';
+      micLbl.textContent = msg; setRec(false);
+      if(msg!=='Voice') setTimeout(()=>{ if(!listening) micLbl.textContent='Voice'; }, 1800);
+    };
+    rec.onresult=(ev)=>{
+      let fin='', itm='';
+      for(let i=ev.resultIndex;i<ev.results.length;i++){
+        const r=ev.results[i]; (r.isFinal?fin+=r[0].transcript:itm+=r[0].transcript);
+      }
+      if(fin){ base += (base && !/\s$/.test(base) ? ' ' : '') + fin.trim(); }
+      const sep = (base && itm && !/\s$/.test(base)) ? ' ' : '';
+      committed = base + (itm ? sep+itm.trim() : '');
+      editor.value = committed; editor.setSelectionRange(editor.value.length, editor.value.length);
+      bufLbl.textContent = itm ? '🎤 '+itm.trim() : '';
+    };
+    try{ rec.start(); }catch(e){ setRec(false); }
+  }
+  function stop(){ if(rec){ try{ rec.stop(); }catch(e){} } setRec(false); }
+  micBtn.onclick=()=>{ listening?stop():start(); editor.focus(); };
 })();
 
 /* ---------- theme ---------- */

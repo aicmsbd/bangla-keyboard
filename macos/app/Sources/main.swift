@@ -257,7 +257,7 @@ final class Hook {
 }
 
 // ============================ app + toolbar window ============================
-final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate {
+final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     static let shared = App()
     var window: NSWindow!
     var web: WKWebView!
@@ -274,6 +274,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         let frame = NSRect(x: 0, y: 0, width: 560, height: 440)
         web = WKWebView(frame: frame, configuration: cfg)
         web.navigationDelegate = self
+        web.uiDelegate = self                                  // grant mic capture for voice typing
         window = NSWindow(contentRect: frame, styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
         window.title = "বাঙলা কিবোর্ড"
@@ -318,6 +319,15 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     func webView(_ w: WKWebView, didFinish nav: WKNavigation!) {
         setMode(Hook.shared.bangla)
         installHookIfPossible()
+    }
+
+    // Auto-grant the WebView's microphone request so voice typing (Web Speech) works without a
+    // second in-page prompt (the system TCC mic/speech prompt still gates it once).
+    @available(macOS 12.0, *)
+    func webView(_ w: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                 initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+                 decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        decisionHandler(.grant)
     }
 
     // Footer credit links (aicms.bd / bangla.it.com) open in the default browser instead of
