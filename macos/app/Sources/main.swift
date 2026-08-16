@@ -63,20 +63,25 @@ func nfc(_ s: String) -> String {
 func transliterate(_ s: String) -> String {
     let a = Array(s)                      // roman input is ASCII → 1 char per element
     var out = "", last = 0, i = 0
+    var lastCons = ""                     // most recently emitted BARE consonant glyph
     let n = a.count
     while i < n {
         var rule: Rule? = nil, klen = 0
         var L = min(3, n - i)
         while L >= 1 { let key = String(a[i..<i+L]); if let u = MAP[key] { rule = u; klen = L; break }; L -= 1 }
-        guard let u = rule else { out.append(a[i]); last = 3; i += 1; continue }
+        guard let u = rule else { out.append(a[i]); last = 3; lastCons = ""; i += 1; continue }
         i += klen
         switch u {
-        case .cons(let c):      if last == 1 { out += "্" }; out += c; last = 1
-        case .vowel(let iv, let kv): out += (last == 1 ? kv : iv); last = 2
-        case .yphola:           out += (last == 1 ? "্য" : "য়"); last = 1
-        case .wphola:           out += (last == 1 ? "্ব" : "ওয়"); last = 1
-        case .sign(let sg):     out += sg; last = 3
-        case .hasanta:          out += "্"; last = 1
+        case .cons(let c):
+            // Reph before "ল" does not occur in Bangla — "korlam" must stay করলাম, not কর্লাম.
+            let sameSyllable = last == 1 && !(lastCons == "র" && c == "ল")
+            if sameSyllable { out += "্" }
+            out += c; last = 1; lastCons = c.count == 1 ? c : ""
+        case .vowel(let iv, let kv): out += (last == 1 ? kv : iv); last = 2; lastCons = ""
+        case .yphola:           out += (last == 1 ? "্য" : "য়"); last = 1; lastCons = ""
+        case .wphola:           out += (last == 1 ? "্ব" : "ওয়"); last = 1; lastCons = ""
+        case .sign(let sg):     out += sg; last = 3; lastCons = ""
+        case .hasanta:          out += "্"; last = 1; lastCons = ""
         }
     }
     return nfc(out)
@@ -271,6 +276,11 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         NSApp.setActivationPolicy(.regular)
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(self, name: "host")
+        // WKWebView does not expose navigator.mediaDevices/getUserMedia by default (unlike Safari.app) —
+        // without this, the mic never even starts (Web Speech's SpeechRecognition silently no-ops), no
+        // matter what the WKUIDelegate grants. Confirmed via a standalone probe: navigator.mediaDevices
+        // is "undefined" without this preference and becomes a working object with it, on macOS 13.7.
+        cfg.preferences.setValue(true, forKey: "mediaDevicesEnabled")
         let frame = NSRect(x: 0, y: 0, width: 560, height: 440)
         web = WKWebView(frame: frame, configuration: cfg)
         web.navigationDelegate = self

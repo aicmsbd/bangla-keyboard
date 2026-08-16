@@ -168,6 +168,9 @@ static const CorpusCase kCorpus[] = {
     {"pratiShThanik", "প্রাতিষ্ঠানিক", "verified"},
     {"nirapotta", "নিরাপত্তা", "verified"},
     {"protyasha", "প্রত্যাশা", "verified"},
+    {"korlam", "করলাম", "no reph before l"},
+    {"korlo", "করল", "no reph before l"},
+    {"korle", "করলে", "no reph before l"},
 };
 static const size_t kCorpusN = sizeof(kCorpus) / sizeof(kCorpus[0]);
 } // namespace banglaphon

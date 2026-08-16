@@ -131,6 +131,7 @@ inline Str transliterate(const std::string& s) {
     const auto& t = table();
     Str out;
     Prev last = Prev::None;
+    char16_t lastCons = 0;  // most recently emitted BARE consonant glyph (0 = none/not applicable)
     const size_t n = s.size();
     const size_t MAXK = 3;
 
@@ -156,38 +157,49 @@ inline Str transliterate(const std::string& s) {
         i += key.size();
 
         switch (u->kind) {
-            case Kind::Cons:
-                if (last == Prev::Cons) out += u"্";   // auto-conjunct
+            case Kind::Cons: {
+                // Reph before "ল" does not occur in Bangla ("র্ল" is not a real cluster) — a bare
+                // র directly followed by ল stays two separate syllables, e.g. "korlam" -> করলাম,
+                // not কর্লাম. Every other adjacent bare-consonant pair still auto-conjuncts.
+                bool sameSyllable = (last == Prev::Cons) && !(lastCons == u'র' && u->a == u"ল");
+                if (sameSyllable) out += u"্";   // auto-conjunct
                 out += u->a;
                 last = Prev::Cons;
+                lastCons = (u->a.size() == 1) ? u->a[0] : char16_t(0);
                 break;
+            }
 
             case Kind::Vowel:
                 if (last == Prev::Cons) out += u->b;    // kar (empty for inherent 'o')
                 else                    out += u->a;    // independent
                 last = Prev::Vowel;
+                lastCons = 0;
                 break;
 
             case Kind::YPhola:
                 if (last == Prev::Cons) out += u"্য";   // ya-phola on the consonant
                 else                    out += u"য়";    // standalone ya (with nukta)
                 last = Prev::Cons;
+                lastCons = 0;
                 break;
 
             case Kind::WPhola:
                 if (last == Prev::Cons) out += u"্ব";   // ba-phola (বিশ্ব = "bishwo")
                 else                    out += u"ওয়";  // standalone
                 last = Prev::Cons;
+                lastCons = 0;
                 break;
 
             case Kind::Sign:
                 out += u->a;
                 last = Prev::Other;   // does not open a consonant for conjuncting
+                lastCons = 0;
                 break;
 
             case Kind::Hasanta:
                 out += u"্";
                 last = Prev::Cons;    // keep "open" so a following consonant joins
+                lastCons = 0;         // explicit hasanta always forces the next join
                 break;
         }
     }
