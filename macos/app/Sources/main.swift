@@ -12,6 +12,7 @@ import Cocoa
 import WebKit
 import ApplicationServices
 import Carbon    // IsSecureEventInputEnabled()
+import AVFoundation    // mic access for voice typing (VoiceCloud.swift)
 
 // Append a diagnostic line to ~/Library/Logs/BanglaKeyboard.log so the Accessibility /
 // hook / mode state is observable from outside the app (tail -f it to confirm the fix).
@@ -373,6 +374,93 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         guard let s = m.body as? String else { return }
         if s == "mode:bn" { Hook.shared.setBangla(true) }
         else if s == "mode:en" { Hook.shared.setBangla(false) }
+        else if s == "voice:toggle" { toggleVoice() }
+    }
+
+    // ============================ voice typing (Google Cloud STT) ============================
+    private var voiceRecording = false
+
+    private func runJS(_ js: String) { web?.evaluateJavaScript(js, completionHandler: nil) }
+
+    private func jsString(_ s: String) -> String {
+        // Minimal JS string-literal escaping for text we hand back via evaluateJavaScript.
+        var o = ""
+        for c in s {
+            switch c {
+            case "\\": o += "\\\\"
+            case "'": o += "\\'"
+            case "\n": o += "\\n"
+            default: o.append(c)
+            }
+        }
+        return o
+    }
+
+    private func toggleVoice() {
+        if voiceRecording {
+            voiceRecording = false
+            runJS("window.__hostVoiceState&&window.__hostVoiceState('transcribing')")
+            let pcm = VoiceRecorder.shared.stop()
+            guard let key = VoiceKeychain.load(), !key.isEmpty else {
+                runJS("window.__hostVoiceState&&window.__hostVoiceState('idle')")
+                return
+            }
+            let lang = Hook.shared.bangla ? "bn-BD" : "en-US"
+            GoogleSTT.recognize(pcm16: pcm, languageCode: lang, apiKey: key) { [weak self] result in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    switch result {
+                    case .success(let text):
+                        self.runJS("window.__hostVoiceResult&&window.__hostVoiceResult('\(self.jsString(text))')")
+                    case .failure(let err):
+                        bkLog("GoogleSTT error: \(err)")
+                        if err == "EMPTY" { self.runJS("window.__hostVoiceState&&window.__hostVoiceState('idle')"); return }
+                        let isKeyError = err.localizedCaseInsensitiveContains("API key")
+                            || err.localizedCaseInsensitiveContains("PERMISSION_DENIED")
+                            || err.localizedCaseInsensitiveContains("UNAUTHENTICATED")
+                            || err.localizedCaseInsensitiveContains("invalid")
+                        self.runJS("window.__hostVoiceError&&window.__hostVoiceError('\(self.jsString(err))', \(isKeyError))")
+                        if isKeyError { self.promptForAPIKey() }
+                    }
+                }
+            }
+        } else {
+            guard let key = VoiceKeychain.load(), !key.isEmpty else {
+                promptForAPIKey()
+                return
+            }
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    guard granted else {
+                        self.runJS("window.__hostVoiceError&&window.__hostVoiceError('Mic permission denied', false)")
+                        return
+                    }
+                    self.voiceRecording = true
+                    VoiceRecorder.shared.start()
+                    self.runJS("window.__hostVoiceState&&window.__hostVoiceState('listening')")
+                }
+            }
+        }
+    }
+
+    private func promptForAPIKey() {
+        let alert = NSAlert()
+        alert.messageText = "Google Cloud Speech-to-Text API Key"
+        alert.informativeText = "Voice typing needs Google Cloud's speech API for Bangla support (WKWebView's own speech engine doesn't work, and Apple's native one has no Bangla). Paste your API key below — it's stored only in the macOS Keychain and sent only to Google's API."
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+        if let existing = VoiceKeychain.load() { field.stringValue = existing }
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        let resp = alert.runModal()
+        if resp == .alertFirstButtonReturn {
+            let key = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !key.isEmpty { VoiceKeychain.save(key) }
+        }
+        runJS("window.__hostVoiceState&&window.__hostVoiceState('idle')")
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
 }

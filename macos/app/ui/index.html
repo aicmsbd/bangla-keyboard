@@ -430,47 +430,6 @@ document.getElementById('swapBtn').onclick=()=>setMode(mode==='bn'?'en':'bn');
   bar.addEventListener('pointerup',()=>drag=false);
 })();
 
-/* ---------- voice typing (Web Speech API — like freetool.bd) ---------- */
-(function(){
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const micBtn=document.getElementById('micBtn'), micLbl=document.getElementById('micLbl');
-  if(!SR){ micBtn.hidden=true; return; }              // no speech engine in this WebView -> hide the button
-  micBtn.hidden=false;
-  let rec=null, listening=false, base='';
-  function setRec(on){ listening=on; micBtn.classList.toggle('rec',on); micLbl.textContent=on?'Listening…':'Voice'; }
-  function start(){
-    if(listening) return;
-    try{ rec=new SR(); }catch(e){ return; }
-    rec.lang = (mode==='bn') ? 'bn-BD' : 'en-US';     // follow the current mode
-    rec.continuous=true; rec.interimResults=true;
-    base = committed + (mode==='bn'?translit(roman):roman);  // freeze current text; speech appends after it
-    roman='';
-    rec.onstart=()=>setRec(true);
-    rec.onend=()=>{ setRec(false); rec=null; committed=editor.value; bufLbl.textContent=''; };
-    rec.onerror=(e)=>{
-      const msg = (e.error==='not-allowed'||e.error==='service-not-allowed') ? 'Mic blocked'
-                : (e.error==='network') ? 'No voice service'
-                : (e.error==='no-speech') ? 'Voice' : 'Voice';
-      micLbl.textContent = msg; setRec(false);
-      if(msg!=='Voice') setTimeout(()=>{ if(!listening) micLbl.textContent='Voice'; }, 1800);
-    };
-    rec.onresult=(ev)=>{
-      let fin='', itm='';
-      for(let i=ev.resultIndex;i<ev.results.length;i++){
-        const r=ev.results[i]; (r.isFinal?fin+=r[0].transcript:itm+=r[0].transcript);
-      }
-      if(fin){ base += (base && !/\s$/.test(base) ? ' ' : '') + fin.trim(); }
-      const sep = (base && itm && !/\s$/.test(base)) ? ' ' : '';
-      committed = base + (itm ? sep+itm.trim() : '');
-      editor.value = committed; editor.setSelectionRange(editor.value.length, editor.value.length);
-      bufLbl.textContent = itm ? '🎤 '+itm.trim() : '';
-    };
-    try{ rec.start(); }catch(e){ setRec(false); }
-  }
-  function stop(){ if(rec){ try{ rec.stop(); }catch(e){} } setRec(false); }
-  micBtn.onclick=()=>{ listening?stop():start(); editor.focus(); };
-})();
-
 /* ---------- theme ---------- */
 const themeBtn=document.getElementById('themeBtn');
 themeBtn.onclick=()=>{const cur=document.documentElement.getAttribute('data-theme')
@@ -495,6 +454,76 @@ if(NATIVE){
   const _hpost=m=>{try{if(WKH)WKH.postMessage(m);}catch(_){}};
   _hpost('mode:'+mode);                                                         // sync default mode to the native host on load
 }
+
+/* ---------- voice typing ----------
+   macOS: WKWebView's own SpeechRecognition never fires any event (verified — WebKit doesn't
+   actually implement it), and Apple's native Speech framework has no Bangla support at all.
+   So on macOS the native host owns mic capture and calls Google Cloud Speech-to-Text with the
+   user's own API key (entered once, kept in the macOS Keychain); this JS side only sends
+   start/stop and renders whatever the host reports back.
+   Windows/Linux (no native bridge): fall back to the WebView's own Web Speech API, if any. */
+(function(){
+  const micBtn=document.getElementById('micBtn'), micLbl=document.getElementById('micLbl');
+  if(NATIVE){
+    micBtn.hidden=false;
+    let recording=false;
+    window.__hostVoiceState=(state)=>{
+      if(state==='listening'){ recording=true; micBtn.classList.add('rec'); micLbl.textContent='Listening…'; }
+      else if(state==='transcribing'){ micBtn.classList.remove('rec'); micLbl.textContent='Transcribing…'; }
+      else { recording=false; micBtn.classList.remove('rec'); micLbl.textContent='Voice'; }
+    };
+    window.__hostVoiceResult=(text)=>{
+      micLbl.textContent='Voice';
+      if(!text) return;
+      if(roman) commitWord('');                                     // flush any in-progress typing first
+      committed += (committed && !/\s$/.test(committed) ? ' ' : '') + text;
+      render(); editor.focus();
+    };
+    window.__hostVoiceError=(msg,isKeyError)=>{
+      recording=false; micBtn.classList.remove('rec');
+      micLbl.textContent = isKeyError ? 'Bad API key' : 'Voice error';
+      setTimeout(()=>{ if(!recording) micLbl.textContent='Voice'; }, 2200);
+    };
+    micBtn.onclick=()=>{ _hpost('voice:toggle'); editor.focus(); };
+  }else{
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SR){ micBtn.hidden=true; return; }
+    micBtn.hidden=false;
+    let rec=null, listening=false, base='';
+    function setRec(on){ listening=on; micBtn.classList.toggle('rec',on); micLbl.textContent=on?'Listening…':'Voice'; }
+    function start(){
+      if(listening) return;
+      try{ rec=new SR(); }catch(e){ return; }
+      rec.lang = (mode==='bn') ? 'bn-BD' : 'en-US';     // follow the current mode
+      rec.continuous=true; rec.interimResults=true;
+      base = committed + (mode==='bn'?translit(roman):roman);  // freeze current text; speech appends after it
+      roman='';
+      rec.onstart=()=>setRec(true);
+      rec.onend=()=>{ setRec(false); rec=null; committed=editor.value; bufLbl.textContent=''; };
+      rec.onerror=(e)=>{
+        const msg = (e.error==='not-allowed'||e.error==='service-not-allowed') ? 'Mic blocked'
+                  : (e.error==='network') ? 'No voice service'
+                  : (e.error==='no-speech') ? 'Voice' : 'Voice';
+        micLbl.textContent = msg; setRec(false);
+        if(msg!=='Voice') setTimeout(()=>{ if(!listening) micLbl.textContent='Voice'; }, 1800);
+      };
+      rec.onresult=(ev)=>{
+        let fin='', itm='';
+        for(let i=ev.resultIndex;i<ev.results.length;i++){
+          const r=ev.results[i]; (r.isFinal?fin+=r[0].transcript:itm+=r[0].transcript);
+        }
+        if(fin){ base += (base && !/\s$/.test(base) ? ' ' : '') + fin.trim(); }
+        const sep = (base && itm && !/\s$/.test(base)) ? ' ' : '';
+        committed = base + (itm ? sep+itm.trim() : '');
+        editor.value = committed; editor.setSelectionRange(editor.value.length, editor.value.length);
+        bufLbl.textContent = itm ? '🎤 '+itm.trim() : '';
+      };
+      try{ rec.start(); }catch(e){ setRec(false); }
+    }
+    function stop(){ if(rec){ try{ rec.stop(); }catch(e){} } setRec(false); }
+    micBtn.onclick=()=>{ listening?stop():start(); editor.focus(); };
+  }
+})();
 
 render();editor.focus();
 </script>

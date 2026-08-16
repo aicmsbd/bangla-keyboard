@@ -5,8 +5,8 @@
 1 ICON "banglakeyboard.ico"
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION    1,1,5,0
- PRODUCTVERSION 1,1,5,0
+ FILEVERSION    1,1,6,0
+ PRODUCTVERSION 1,1,6,0
  FILEOS         VOS_NT_WINDOWS32
  FILETYPE       VFT_APP
 BEGIN
@@ -16,12 +16,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "AiCMS.BD"
             VALUE "FileDescription",  "Bangla Keyboard (preview panel)"
-            VALUE "FileVersion",      "1.1.5.0"
+            VALUE "FileVersion",      "1.1.6.0"
             VALUE "InternalName",     "bangla-panel"
             VALUE "LegalCopyright",   "Copyright (C) 2026 AiCMS.BD"
             VALUE "OriginalFilename", "bangla-panel.exe"
             VALUE "ProductName",      "Bangla Keyboard"
-            VALUE "ProductVersion",   "1.1.5"
+            VALUE "ProductVersion",   "1.1.6"
         END
     END
     BLOCK "VarFileInfo"

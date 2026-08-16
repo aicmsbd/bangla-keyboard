@@ -10,7 +10,7 @@ APPDIR="$BUILD/$APP"
 mkdir -p "$APPDIR/Contents/MacOS" "$APPDIR/Contents/Resources/ui"
 
 echo "==> compiling app (universal: Apple Silicon + Intel)"
-FW="-framework Cocoa -framework WebKit -framework ApplicationServices"
+FW="-framework Cocoa -framework WebKit -framework ApplicationServices -framework AVFoundation -framework Security"
 swiftc -O -target arm64-apple-macos11  Sources/*.swift $FW -o "$BUILD/banglakb-arm64"
 swiftc -O -target x86_64-apple-macos11 Sources/*.swift $FW -o "$BUILD/banglakb-x86_64"
 lipo -create "$BUILD/banglakb-arm64" "$BUILD/banglakb-x86_64" -output "$APPDIR/Contents/MacOS/banglakb"
@@ -37,8 +37,8 @@ cat > "$APPDIR/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>com.bangla.keyboard.app</string>
   <key>CFBundleExecutable</key><string>banglakb</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.1.5</string>
-  <key>CFBundleVersion</key><string>5</string>
+  <key>CFBundleShortVersionString</key><string>1.1.6</string>
+  <key>CFBundleVersion</key><string>6</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>NSHighResolutionCapable</key><true/>

@@ -35,7 +35,7 @@ cat > "$XML" <<EOF
   <name>org.freedesktop.IBus.Bangla</name>
   <description>বাঙলা কিবোর্ড — Bangla phonetic keyboard (Banglish)</description>
   <exec>$BIN --ibus</exec>
-  <version>1.1.5</version>
+  <version>1.1.6</version>
   <author>AiCMS.BD</author>
   <license>AICMS-1.0</license>
   <homepage>https://github.com/aicmsbd/bangla-keyboard</homepage>

@@ -8,7 +8,7 @@
 ; and MyAppVersion below.
 
 #define MyAppName "Bangla Keyboard"
-#define MyAppVersion "1.1.5"
+#define MyAppVersion "1.1.6"
 #define MyAppPublisher "AiCMS.BD"
 #define MyAppExe "bangla-tray.exe"
 #define MyAppURL "https://github.com/aicmsbd/bangla-keyboard"
